@@ -35,7 +35,7 @@ public class TargetTableModel extends AbstractTableModel {
 	private GUIMain guiMain;
 
 	private static final transient String[] standardTitles = new String[]{
-			"#", "Domain/Subnet", "Keyword", "Comment", "TrustLevel"};
+			"#", "Domain/Subnet", "Keyword", "Comment", "TrustLevel","Count"};
 	private static transient List<String> titletList = new ArrayList<>(Arrays.asList(standardTitles));
 
 	private static final transient Logger log = LogManager.getLogger(TargetTableModel.class);
@@ -130,6 +130,9 @@ public class TargetTableModel extends AbstractTableModel {
 		if (columnIndex == titletList.indexOf("TrustLevel")) {
 			return entry.getTrustLevel();
 		}
+		if (columnIndex == titletList.indexOf("Count")) {
+			return entry.getSubdomainCount();
+		}
 		return "";
 	}
 
@@ -190,7 +193,7 @@ public class TargetTableModel extends AbstractTableModel {
 	public Class<?> getColumnClass(int columnIndex) {
 		if (columnIndex == titletList.indexOf("Black")) {
 			return boolean.class;
-		} else if (columnIndex == titletList.indexOf("#")) {
+		} else if (columnIndex == titletList.indexOf("#") || columnIndex == titletList.indexOf("Count")) {
 			return Integer.class;//如果返回int.class排序会有问题，why？
 		} else {
 			return String.class;
@@ -542,6 +545,22 @@ public class TargetTableModel extends AbstractTableModel {
 			}
 		}
 	}
+	
+	public void refreshSubdomainCount() {
+		for (TargetEntry entry:targetEntries.values()) {
+			int oldCount = entry.getSubdomainCount();
+			entry.countSubdomain(guiMain.getDomainPanel().getDomainResult().getSubDomainSet());
+			int newCount = entry.getSubdomainCount();
+			if (oldCount!= newCount) {
+				//减少数据库操作
+				guiMain.getDomainPanel().getTargetDao().addOrUpdateTarget(entry);
+			}
+		}
+		int size = targetEntries.size();
+		if (size>=1) {
+			fireTableRowsUpdated(0,targetEntries.size()-1);
+		}
+	}
 
 	/**
 	 * 判断域名或IP，是否为我们的目标资产。完全是根据target中的配置来判断的。
@@ -691,6 +710,19 @@ public class TargetTableModel extends AbstractTableModel {
 		for (int i = rows.length - 1; i >= 0; i--) {//降序删除才能正确删除每个元素
 			TargetEntry checked = targetEntries.get(rows[i]);
 			checked.addComment(commentAdd);
+			guiMain.getDomainPanel().getTargetDao().addOrUpdateTarget(checked);
+		}
+		fireUpdated(rows);
+	}
+	
+	
+	public void removeComments(int[] rows, String commentToRemove) {
+		//because thread let the delete action not in order, so we must loop in here.
+		//list length and index changed after every remove.the origin index not point to right item any more.
+		Arrays.sort(rows); //升序
+		for (int i = rows.length - 1; i >= 0; i--) {//降序删除才能正确删除每个元素
+			TargetEntry checked = targetEntries.get(rows[i]);
+			checked.getComments().remove(commentToRemove);
 			guiMain.getDomainPanel().getTargetDao().addOrUpdateTarget(checked);
 		}
 		fireUpdated(rows);
